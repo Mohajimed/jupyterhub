@@ -2,20 +2,22 @@ services:
   jupyterhub:
     build: .
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+
     environment:
-      # must be 32 bytes (or longer). put a long random string
-      JUPYTERHUB_CRYPT_KEY: "L4TPauFzZnqLVkkaQ8RGvKnSbrwsPJC5"
+      # Put these in Coolify "Environment Variables / Secrets" ideally
+      JUPYTERHUB_CRYPT_KEY: ${JUPYTERHUB_CRYPT_KEY}
+      JHUB_DUMMY_PASSWORD: ${JHUB_DUMMY_PASSWORD}
+
     volumes:
-      # hub state (db, cookies, etc.)
+      # Hub state (db, cookies, etc.)
       - jupyterhub_data:/data
 
-      # hub config
+      # Hub config
       - ./jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py:ro
 
-      # required: lets the hub spawn docker containers
+      # Required for DockerSpawner (Hub spawns user containers)
       - /var/run/docker.sock:/var/run/docker.sock
+
     command: >
       bash -lc "jupyterhub -f /srv/jupyterhub/jupyterhub_config.py"
 

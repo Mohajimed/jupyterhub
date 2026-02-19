@@ -1,0 +1,23 @@
+services:
+  jupyterhub:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # must be 32 bytes (or longer). put a long random string
+      JUPYTERHUB_CRYPT_KEY: "CHANGE_ME_TO_A_LONG_RANDOM_SECRET"
+    volumes:
+      # hub state (db, cookies, etc.)
+      - jupyterhub_data:/data
+
+      # hub config
+      - ./jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py:ro
+
+      # required: lets the hub spawn docker containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      bash -lc "jupyterhub -f /srv/jupyterhub/jupyterhub_config.py"
+
+volumes:
+  jupyterhub_data:

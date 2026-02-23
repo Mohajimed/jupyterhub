@@ -1,33 +1,61 @@
-from dockerspawner import DockerSpawner
-from jupyterhub.auth import DummyAuthenticator
+# Copyright (c) Jupyter Development Team.
+# Distributed under the terms of the Modified BSD License.
 
-c = get_config()
+# Configuration file for JupyterHub
+import os
 
-# Hub listens inside the container
-c.JupyterHub.bind_url = "http://:8000"
+c = get_config()  # noqa: F821
 
-# --- AUTH (testing only) ---
-# Same password for all users (good for quick test).
-# Replace later with GitHub/Google OAuth.
-c.JupyterHub.authenticator_class = DummyAuthenticator
-c.DummyAuthenticator.password = __import__("os").environ.get("JHUB_DUMMY_PASSWORD", "CHANGE_ME_PASSWORD")
+# We rely on environment variables to configure JupyterHub so that we
+# avoid having to rebuild the JupyterHub container every time we change a
+# configuration parameter.
 
-# Make an admin user (optional)
-c.Authenticator.admin_users = {"admin"}
+# Spawn single-user servers as Docker containers
+c.JupyterHub.spawner_class = "dockerspawner.DockerSpawner"
 
-# --- SPAWNER: one Docker container per user ---
-c.JupyterHub.spawner_class = DockerSpawner
-c.DockerSpawner.image = "jupyter/datascience-notebook:latest"
-c.DockerSpawner.name_template = "jhub-{username}"
+# Spawn containers from this image
+c.DockerSpawner.image = os.environ["DOCKER_NOTEBOOK_IMAGE"]
 
-# Persist each user's notebooks in a dedicated Docker volume
-c.DockerSpawner.volumes = {
-    "jhub-user-{username}": "/home/jovyan/work"
-}
+# Connect containers to this Docker network
+network_name = os.environ["DOCKER_NETWORK_NAME"]
+c.DockerSpawner.use_internal_ip = True
+c.DockerSpawner.network_name = network_name
 
-# Limits (optional but recommended)
-c.DockerSpawner.mem_limit = "1G"
-c.DockerSpawner.cpu_limit = 1.0
+# Explicitly set notebook directory because we'll be mounting a volume to it.
+# Most `jupyter/docker-stacks` *-notebook images run the Notebook server as
+# user `jovyan`, and set the notebook directory to `/home/jovyan/work`.
+# We follow the same convention.
+notebook_dir = os.environ.get("DOCKER_NOTEBOOK_DIR", "/home/jovyan/work")
+c.DockerSpawner.notebook_dir = notebook_dir
 
-# Usually fine on a single Docker host
-c.DockerSpawner.network_name = "bridge"
+# Mount the real user's Docker volume on the host to the notebook user's
+# notebook directory in the container
+c.DockerSpawner.volumes = {"jupyterhub-user-{username}": notebook_dir}
+
+# Remove containers once they are stopped
+c.DockerSpawner.remove = True
+
+# For debugging arguments passed to spawned containers
+c.DockerSpawner.debug = True
+
+# User containers will access hub by container name on the Docker network
+c.JupyterHub.hub_ip = "jupyterhub"
+c.JupyterHub.hub_port = 8080
+
+# Persist hub data on volume mounted inside container
+c.JupyterHub.cookie_secret_file = "/data/jupyterhub_cookie_secret"
+c.JupyterHub.db_url = "sqlite:////data/jupyterhub.sqlite"
+
+# Allow all signed-up users to login
+c.Authenticator.allow_all = True
+
+# Authenticate users with Native Authenticator
+c.JupyterHub.authenticator_class = "nativeauthenticator.NativeAuthenticator"
+
+# Allow anyone to sign-up without approval
+c.NativeAuthenticator.open_signup = True
+
+# Allowed admins
+admin = os.environ.get("JUPYTERHUB_ADMIN")
+if admin:
+    c.Authenticator.admin_users = [admin]
